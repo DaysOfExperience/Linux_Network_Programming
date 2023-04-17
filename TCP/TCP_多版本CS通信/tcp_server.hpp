@@ -104,7 +104,7 @@ static void transform(int sock, const std::string &client_ip, const uint16_t &cl
     {
         logMessage(ERROR, "service recv error");
     }
-    // close(sock);  // 服务端进行第三次挥手！不会出现大量CLOSE_WAIT连接
+    close(sock);  // 服务端进行第三次挥手！不会出现大量CLOSE_WAIT连接
 }
 
 // class ThreadData
