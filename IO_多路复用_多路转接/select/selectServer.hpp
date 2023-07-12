@@ -1,15 +1,18 @@
+#pragma once
 #include <iostream>
 #include <sys/select.h>
 #include "Sock.hpp"
 
 #define FD_NONE -1
+#define BITS 8
+#define NUM sizeof(fd_set)*BITS
 
 class SelectServer
 {
-    const static int NUM = 1024;   // select 有一次处理文件描述符数量的最大上限（因为fd_set类型）
+    // const static int NUM = 1024;   // select 有一次处理文件描述符数量的最大上限（因为fd_set类型）
 
 public:
-    SelectServer(uint16_t port = 8080) : _port(port)
+    SelectServer(const uint16_t &port = 8080) : _port(port)
     {
         // Server:创建套接字，绑定，监听
         _listen_sock = Sock::Socket();
@@ -59,7 +62,13 @@ public:
             }
         }
     }
-    void HandlerEvents(fd_set &fs)
+    ~SelectServer()
+    {
+        if(_listen_sock >= 0)
+            close(_listen_sock);
+    }
+private:
+    void HandlerEvents(const fd_set &fs)
     {
         // DebugPrint();
         // fs中存储着当前读事件就绪的文件描述符
@@ -83,7 +92,7 @@ public:
         // listen套接字就绪，进行TCP连接的获取
         std::string ip;
         uint16_t port;
-        int sock = Sock::Accept(_listen_sock, &port, &ip);
+        int sock = Sock::Accept(_listen_sock, &port, &ip);  // Accpet有bug
         if (sock < 0)
         {
             logMessage(WARNING, "accept error");
@@ -101,6 +110,7 @@ public:
         {
             // select监管的文件描述符数量达到上限
             logMessage(WARNING, "select socket already full, sock:%d", sock);
+            close(sock);
             return;
         }
         _sock_array[i] = sock; // 添加到这里之后，服务器下次select循环时，会自动将此文件描述符的读事件加入select关心中
