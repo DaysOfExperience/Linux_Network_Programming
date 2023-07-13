@@ -55,14 +55,14 @@ public:
         _epoll.Create();
 
         // 3. 将listen套接字添加到epoll中
-
+        AddConnection(_listensock, std::bind(Accepter, this, std::placeholders::_1), nullptr, nullptr);
         // 4. 设定_revs，也就是存储就绪的事件
         _revs = new struct epoll_event[_revs_num];
     }
     void AddConnection(int sock, func_t recv_cb = nullptr, func_t send_cb = nullptr, func_t except_cb = nullptr)
     {
         // 设置非阻塞！因为这个epoll是ET模式
-        
+
         // 添加一个连接到TcpServer中
         // a. 添加到connections内
         // b. 添加到epoll中
@@ -71,9 +71,25 @@ public:
         conn->_server_ptr = this;
 
         // 添加到epoll中
-        _epoll.AddEvent(sock, EPOLLIN | EPOLLET);
+        _epoll.AddEvent(sock, EPOLLIN | EPOLLET);  // 每一个事件添加进epoll时，默认都是关心读，还有ET模式
         // 添加到connections内
         _connections.insert(std::make_pair(sock, conn));
+    }
+    void Accepter(Connection *conn)
+    {
+
+    }
+    void Recver(Connection *conn)
+    {
+
+    }
+    void Sender(Connection *conn)
+    {
+
+    }
+    void Excepter(Connection *conn)
+    {
+
     }
     void Dispather()
     {
@@ -105,20 +121,34 @@ public:
         // 有事件就绪
         for(int i = 0; i < n; ++i)
         {
+            // 什么套接字的什么事件就绪了
             int sock = _revs[i].data.fd;
             int revents = _revs[i].events;
-
-            if(revents & EPOLLERR)
-            if(revents & EPOLLHUP)
+            bool exists = ConnIsExists(sock);
+            Connection *conn = nullptr;
+            if(exists)
+                conn = _connections[sock];
+            // if(revents & EPOLLERR || revents & EPOLLHUP)
+            // {
+            //     // 异常事件就绪
+            //     _connections[sock]->_except_cb(_connections[sock]);
+            // }
             if(revents & EPOLLIN)
             {
-
+                // 读事件就绪，不需要判断是listen还是普通
+                if(exists && conn->_recv_cb != nullptr)
+                    conn->_recv_cb(conn);
             }
             if(revents & EPOLLOUT)
             {
-
+                if(exists && conn->_send_cb != nullptr)
+                    conn->_send_cb(conn);
             }
         }
+    }
+    bool ConnIsExists(int sock)
+    {
+        return _connections.find(sock) != _connections.end();
     }
     ~TcpServer()
     {

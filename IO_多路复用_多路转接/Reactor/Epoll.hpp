@@ -14,12 +14,17 @@ public:
         _epfd = epoll_create(128);
         if(_epfd < 0) exit(5);
     }
+    // 哪个文件描述符的哪些事件
     bool AddEvent(int sock, uint32_t events)
     {
         struct epoll_event ev;
         ev.data.fd = sock;
         ev.events = events;
         return 0 == epoll_ctl(_epfd, EPOLL_CTL_ADD, sock, &ev);
+    }
+    bool DelEvent(int sock)
+    {
+        return 0 == epoll_ctl(_epfd, EPOLL_CTL_DEL, sock, nullptr);
     }
     bool ModEvent()
     {}
