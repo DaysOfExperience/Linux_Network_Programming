@@ -4,6 +4,7 @@
 #include <string>
 #include <cstring>
 #include <unistd.h>
+#include <fcntl.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
@@ -25,7 +26,7 @@ public:
             logMessage(FATAL, "create listen socket error, %d:%s", errno, strerror(errno));
             exit(2);
         }
-        logMessage(NORMAL, "create listen socket success: %d", listen_sock); // 1111Log
+        // logMessage(NORMAL, "create listen socket success: %d", listen_sock); // 1111Log
         return listen_sock;
     }
     static void Bind(int sock, uint16_t port, std::string ip = "0.0.0.0")
@@ -59,7 +60,7 @@ public:
     // const std::string &: 输入型参数
     // std::string *: 输出型参数
     // std::string &: 输入输出型参数
-    static int Accept(int sock, uint16_t *port, std::string *ip)
+    static int Accept(int sock, uint16_t *port, std::string *ip, int *accept_errno = nullptr)
     {
         // accept失败进程不退出，返回-1
         // 成功则返回对应的通信套接字
@@ -70,7 +71,9 @@ public:
         // On success, these system calls return a nonnegative integer that is a descriptor for the accepted socket.  On error, -1 is returned, and errno is set appropriately.
         if (service_sock < 0)
         {
-            logMessage(ERROR, "accept error, %d:%s", errno, strerror(errno));
+            // logMessage(ERROR, "accept error, %d:%s", errno, strerror(errno));
+            if(accept_errno)
+                *accept_errno = errno;
             return -1;  // accept失败不直接exit，而是返回-1。因为在循环语句内部。
         }
         if (port)
@@ -97,6 +100,11 @@ public:
             return -1;
         }
         return 0;
+    }
+    static void SetNonBlock(int sock)
+    {
+        int fl = fcntl(sock, F_GETFL);
+        fcntl(sock, F_SETFL, fl | O_NONBLOCK);
     }
 public:
     Sock() = default;
