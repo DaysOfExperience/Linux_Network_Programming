@@ -2,6 +2,7 @@
 #include <sys/epoll.h>
 #include <iostream>
 #include <unistd.h>
+
 class Epoll
 {
     const static int gtimeout = 5000;
@@ -28,13 +29,11 @@ public:
     }
     bool ModEvent()
     {}
-    bool DelEvent()
-    {}
     int Wait(struct epoll_event *revs, int maxevents)
     {
         return epoll_wait(_epfd, revs, maxevents, _timeout);
     }
-    ~Epoll() 
+    ~Epoll()
     {
         if(_epfd >= 0)
             close(_epfd);
