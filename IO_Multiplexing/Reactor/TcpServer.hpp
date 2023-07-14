@@ -7,10 +7,13 @@
 #include "Protocol.hpp"
 #include <unordered_map>
 #include <functional>
+#include <vector>
+
 
 class Connection;
 class TcpServer;
 using func_t = std::function<void (Connection*)>;
+using hanlder_t = std::function<void (Connection*, const string& request)>;
 using namespace ns_protocol;
 class Connection
 {
@@ -79,8 +82,9 @@ public:
         // 添加到connections内
         _connections.insert(std::make_pair(sock, conn));
     }
-    void Dispather()
+    void Dispather(hanlder_t &handler)
     {
+        _handler = handler;
         while(true)
         {
             LoopOnce();
@@ -116,11 +120,11 @@ public:
             Connection *conn = nullptr;
             if(exists)
                 conn = _connections[sock];
-            // if(revents & EPOLLERR || revents & EPOLLHUP)
-            // {
-            //     // 异常事件就绪
-            //     _connections[sock]->_except_cb(_connections[sock]);
-            // }
+            if(revents & EPOLLERR || revents & EPOLLHUP)
+            {
+                // 异常事件就绪
+                _connections[sock]->_except_cb(_connections[sock]);
+            }
             if(revents & EPOLLIN)
             {
                 // 读事件就绪，不需要判断是listen还是普通
@@ -143,7 +147,6 @@ public:
         if(_listensock >= 0) close(_listensock);
         if(_revs) delete[] _revs;
     }
-private:
     // 下面是所有连接的读，写，异常方法(listen套接字&常规套接字)
     void Accepter(Connection *conn)
     {
@@ -171,6 +174,7 @@ private:
                 else
                 {
                     logMessage(WARNING, "accept error, %d : %s", accept_errno, strerror(accept_errno));
+                    break;
                 }
             }
             AddConnection(sock
@@ -180,11 +184,16 @@ private:
             logMessage(DEBUG, "get a new TCP link: ip:%s, port:%d, sock:%d", client_ip.c_str(), client_port, sock);
         }
     }
+    void EnableRW(Connection *conn, bool read, bool write)
+    {
+        uint32_t events = (read ? EPOLLIN : 0 ) | (write ? EPOLLOUT : 0);
+        _epoll.ModEvent(conn->_sock, events);
+    }
     // 常规套接字的读 写 异常方法
     // 读：读取到client传来的序列化后的+报头的应用层报文，读入到接收缓冲区中
     void Recver(Connection *conn)
     {
-        // ET模式，循环读取
+        // ET模式，循环读取，最后会以出错的方式告诉你读完数据了，没有数据了
         char buff[10240];
         bool handle = true;
         while(true)
@@ -205,6 +214,7 @@ private:
                     // 读取失败
                     logMessage(WARNING, "recv error %d : %s", conn->_sock, errno, strerror(errno));
                     handle = false;
+                    conn->_except_cb(conn);
                     break;
                 }
             }
@@ -213,6 +223,7 @@ private:
                 // client关闭连接
                 logMessage(DEBUG, "client[%d] quit, server close too...", conn->_sock);
                 handle = false;
+                conn->_except_cb(conn);
                 break;
             }
             else
@@ -223,16 +234,56 @@ private:
         }
         // 至此可能是本轮数据读取完毕则处理，可能是读取出错，可能是对端关闭连接(不处理)
         if(!handle) return;
-        // 处理接收缓冲区中的数据：多少个应用层报文不确定，需要解决粘包问题（应用层协议）
-        
+        // 处理接收缓冲区中的数据：缓冲区中包括多少个应用层报文是不确定的
+        std::vector<std::string> messages;
+        SplitMessage(conn->_in_buffer, messages);
+        for(auto &s : v) _handler(conn, s);  // 某一个连接的应用层报文
     }
     void Sender(Connection *conn)
     {
-
+        // 一般来说，一旦server要发送的数据写入到发送缓冲区，且使写关心
+        // 而此时写关心之后，TCP的发送缓冲区初始时都是有空间的，就会直接就绪
+        // 我们需要循环发送，直到把应用层的发送缓冲区中数据发完
+        while(true)
+        {
+            ssize_t n = send(conn->_sock, conn->_out_buffer.c_str(), conn->_out_buffer.size(), 0);
+            if(n > 0)
+            {
+                conn->_out_buffer.erase(0, n);
+                if(conn->_out_buffer.empty()) break;  // 本轮发送完毕~
+                // 如果确实是发完了，下次你不break，相当于send空的，这和严格意义上的EAGAIN不服
+            }
+            else
+            {
+                // 可能TCP的发送缓冲区（不是_out_buffer）满了，发送条件不就绪
+                // 如同接收缓冲区空了，也就是本轮任务结束
+                if(errno == EAGAIN || errno == EWOULDBLOCK)
+                    break;
+                else if(errno == EINTR)
+                    continue;
+                else
+                {
+                    // send失败
+                    logMessage(WARNING, "send error, %d : %s", errno, strerror(errno));
+                    conn->_except_cb(conn);
+                    break;
+                }
+            }
+        }
+        // 1. TCP发送缓冲区没满，但是已经把该发的都发了
+        // 2. TCP发送缓冲区满了，发送条件不就绪，此时就是相当于IO = 等 + 拷贝，该等了
+        // 3. 发送出错了~
+        if(conn->_out_buffer.empty())
+            EnableRW(conn, true, false);
     }
     void Excepter(Connection *conn)
     {
-
+        if(!ConnIsExists(conn->_sock)) return;
+        // 存在
+        _connections.erase(conn->_sock);
+        _epoll.DelEvent(conn->_sock);
+        close(conn->_sock);
+        delete conn;
     }
 private:
     int _listensock;
@@ -243,6 +294,9 @@ private:
 
     struct epoll_event *_revs;
     int _revs_num;
+
+    hanlder_t _handler;   // std::function<void (Connection*, const string& request)>;
+    // 对于每一个应用层报文（序列化+报头），通过这个方法进行业务处理
 };
 
 

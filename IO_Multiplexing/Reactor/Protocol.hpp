@@ -3,18 +3,16 @@
 
 #include <iostream>
 #include <string>
+#include <vector>
 #include <cstring>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
-#include <jsoncpp/json/json.h>
 
 // important and new
 namespace ns_protocol
 {
-
-// #define MYSELF 1 // 自己实现序列化反序列化还是使用json库
 
 // SPACE用于序列化和反序列化
 #define SPACE " "
@@ -22,6 +20,21 @@ namespace ns_protocol
 
 #define SEP "\r\n"
 #define SEP_LENGTH strlen(SEP)
+
+void SplitMessage(std::string &in_buffer, std::vector<std::string> &messages)
+{
+    // 将接收缓冲区中的应用层报文数据进行处理，处理为一个个的独立的应用层报文，放入v中
+    while(true)
+    {
+        std::string messgae = deCode(in_buffer);
+        if(message.empty())
+        {
+            // 代表此时接收缓冲区已经没有完整报文了
+            return;
+        }
+        messages.push_back(message);
+    }
+}
 
     // 请求和回复，都需要序列化和反序列化的成员函数
     // 序列化和反序列化双方都不同。但是添加报头和去报头是相同的，"Length\r\nxxxxx\r\n";
@@ -100,7 +113,7 @@ namespace ns_protocol
         int _result;
         int _code; // 状态码
     };
-    
+
     // 进行去报头，报文完整则去报头，并返回有效载荷，不完整则代表失败返回空字符串。
     std::string deCode(std::string &s) // 输入型输出型参数
     {

@@ -27,8 +27,13 @@ public:
     {
         return 0 == epoll_ctl(_epfd, EPOLL_CTL_DEL, sock, nullptr);
     }
-    bool ModEvent()
-    {}
+    bool ModEvent(int sock, uint32_t events)
+    {
+        // 使sock在epoll中改为对events事件进行关心
+        // 其实默认是读和ET
+        events |= EPOLLET;
+        return 0 == epoll_ctl(_epfd, EPOLL_CTL_MOD, sock, &ev);
+    }
     int Wait(struct epoll_event *revs, int maxevents)
     {
         return epoll_wait(_epfd, revs, maxevents, _timeout);
