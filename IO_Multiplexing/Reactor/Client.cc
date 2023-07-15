@@ -39,8 +39,8 @@ int main(int argc, char **argv)
                 quit = true;
                 break;
             }
-            std::string package = deCode(backStr);   // 服务端发来的报文在backStr中，可能粘包
-            if(package.empty())
+            std::string package = deCode(backStr); // 服务端发来的报文在backStr中，可能粘包
+            if (package.empty())
                 continue; // 这次不是一个完整的应用层报文，继续读取
             // 读取到一个完整的应用层报文，且已经去报头，获取有效载荷成功，在package中。
             Response resp;

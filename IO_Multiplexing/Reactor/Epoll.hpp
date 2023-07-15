@@ -32,6 +32,9 @@ public:
         // 使sock在epoll中改为对events事件进行关心
         // 其实默认是读和ET
         events |= EPOLLET;
+        struct epoll_event ev;
+        ev.data.fd = sock;
+        ev.events = events;
         return 0 == epoll_ctl(_epfd, EPOLL_CTL_MOD, sock, &ev);
     }
     int Wait(struct epoll_event *revs, int maxevents)

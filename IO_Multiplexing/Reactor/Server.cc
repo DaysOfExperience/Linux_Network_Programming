@@ -1,5 +1,8 @@
 #include "TcpServer.hpp"
 #include <memory>
+
+using namespace ns_protocol;
+
 Response calculatorHelp(const Request &req)
 {
     // "1+1"???
@@ -35,14 +38,14 @@ Response calculatorHelp(const Request &req)
     }
     return resp;
 }
-void NetCal(Connection *conn, const std::string &request)
+
+void NetCal(Connection *conn, std::string &request)
 {
-    // 某一个client的TCP连接发来一个应用层报文（序列化+报头）
+    // 某一个client的TCP连接发来一个应用层报文（序列化，没有报头！！！）
     // 这一定是一个合法的应用层报文
-    std::string package = deCode(request);  // 去报头
     // 有效载荷在package中。如"1 + 2"
     Request req;
-    req.deserialize(package);
+    req.deserialize(request);
     Response resp = calculatorHelp(req);
     std::string backStr = resp.serialize();  // 响应序列化
     backStr = enCode(backStr);  // 序列化的响应添加报头

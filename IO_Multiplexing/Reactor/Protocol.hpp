@@ -21,20 +21,23 @@ namespace ns_protocol
 #define SEP "\r\n"
 #define SEP_LENGTH strlen(SEP)
 
-void SplitMessage(std::string &in_buffer, std::vector<std::string> &messages)
-{
-    // 将接收缓冲区中的应用层报文数据进行处理，处理为一个个的独立的应用层报文，放入v中
-    while(true)
+    std::string deCode(std::string &s); // 输入型输出型参数
+
+
+    void SplitMessage(std::string &in_buffer, std::vector<std::string> &messages)
     {
-        std::string messgae = deCode(in_buffer);
-        if(message.empty())
+        // 将应用层的接收缓冲区中的应用层报文数据进行处理，处理为一个个的独立的应用层报文，放入messages中
+        while (true)
         {
-            // 代表此时接收缓冲区已经没有完整报文了
-            return;
+            std::string message = deCode(in_buffer);
+            if (message.empty())
+            {
+                // 代表此时接收缓冲区已经没有完整报文了
+                return;
+            }
+            messages.push_back(message);
         }
-        messages.push_back(message);
     }
-}
 
     // 请求和回复，都需要序列化和反序列化的成员函数
     // 序列化和反序列化双方都不同。但是添加报头和去报头是相同的，"Length\r\nxxxxx\r\n";
@@ -109,6 +112,7 @@ void SplitMessage(std::string &in_buffer, std::vector<std::string> &messages)
             _result = atoi(s.substr(pos + SPACE_LENGTH).c_str());
             return true;
         }
+
     public:
         int _result;
         int _code; // 状态码
@@ -153,7 +157,7 @@ void SplitMessage(std::string &in_buffer, std::vector<std::string> &messages)
         if (sz > 0)
         {
             buff[sz] = '\0';
-            *s += buff;    
+            *s += buff;
             return true;
         }
         else if (sz == 0)

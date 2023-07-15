@@ -12,9 +12,11 @@
 
 class Connection;
 class TcpServer;
+
 using func_t = std::function<void (Connection*)>;
-using hanlder_t = std::function<void (Connection*, const string& request)>;
+using hanlder_t = std::function<void (Connection*, std::string& request)>;
 using namespace ns_protocol;
+
 class Connection
 {
 public:
@@ -82,9 +84,9 @@ public:
         // 添加到connections内
         _connections.insert(std::make_pair(sock, conn));
     }
-    void Dispather(hanlder_t &handler)
+    void Dispather(hanlder_t handler)
     {
-        _handler = handler;
+        _handler = handler;  // 对每一个client传来的应用层报文进行业务处理
         while(true)
         {
             LoopOnce();
@@ -123,17 +125,18 @@ public:
             if(revents & EPOLLERR || revents & EPOLLHUP)
             {
                 // 异常事件就绪
-                _connections[sock]->_except_cb(_connections[sock]);
+                if(ConnIsExists(conn->_sock) && conn->_except_cb != nullptr)
+                    conn->_except_cb(conn);
             }
             if(revents & EPOLLIN)
             {
                 // 读事件就绪，不需要判断是listen还是普通
-                if(exists && conn->_recv_cb != nullptr)
+                if(ConnIsExists(conn->_sock) && conn->_recv_cb != nullptr)
                     conn->_recv_cb(conn);
             }
             if(revents & EPOLLOUT)
             {
-                if(exists && conn->_send_cb != nullptr)
+                if(ConnIsExists(conn->_sock) && conn->_send_cb != nullptr)
                     conn->_send_cb(conn);
             }
         }
@@ -174,6 +177,7 @@ public:
                 else
                 {
                     logMessage(WARNING, "accept error, %d : %s", accept_errno, strerror(accept_errno));
+                    conn->_except_cb(conn);
                     break;
                 }
             }
@@ -201,7 +205,7 @@ public:
             ssize_t sz = recv(conn->_sock, buff, sizeof buff - 1, 0);
             if(sz < 0)
             {
-                if(errno == EAGIN || errno == EWOULDBLOCK)
+                if(errno == EAGAIN || errno == EWOULDBLOCK)
                 {
                     break;
                 }
@@ -237,12 +241,15 @@ public:
         // 处理接收缓冲区中的数据：缓冲区中包括多少个应用层报文是不确定的
         std::vector<std::string> messages;
         SplitMessage(conn->_in_buffer, messages);
-        for(auto &s : v) _handler(conn, s);  // 某一个连接的应用层报文
+        for(auto &s : messages) 
+        {
+            _handler(conn, s);  // 某一个连接的应用层报文
+        }
     }
     void Sender(Connection *conn)
     {
-        // 一般来说，一旦server要发送的数据写入到发送缓冲区，且使写关心
-        // 而此时写关心之后，TCP的发送缓冲区初始时都是有空间的，就会直接就绪
+        // 一般来说，一旦server要发送的数据写入到应用层的发送缓冲区，且使写事件被epoll关心
+        // 而此时TCP的发送缓冲区初始时都是有空间的，epoll就会直接检测到写事件就绪
         // 我们需要循环发送，直到把应用层的发送缓冲区中数据发完
         while(true)
         {
@@ -295,7 +302,7 @@ private:
     struct epoll_event *_revs;
     int _revs_num;
 
-    hanlder_t _handler;   // std::function<void (Connection*, const string& request)>;
+    hanlder_t _handler;   // std::function<void (Connection*, string& request)>;
     // 对于每一个应用层报文（序列化+报头），通过这个方法进行业务处理
 };
 
