@@ -5,7 +5,10 @@
 
 class Epoll
 {
-    const static int gtimeout = 5000;
+    const static int gtimeout = 5000;  // 定时阻塞
+private:
+    int _epfd;
+    int _timeout;
 public:
     Epoll(int timeout = gtimeout)
     : _timeout(timeout)
@@ -31,7 +34,6 @@ public:
     {
         // 使sock在epoll中改为对events事件进行关心
         // 其实默认是读和ET
-        events |= EPOLLET;
         struct epoll_event ev;
         ev.data.fd = sock;
         ev.events = events;
@@ -46,7 +48,4 @@ public:
         if(_epfd >= 0)
             close(_epfd);
     }
-private:
-    int _epfd;
-    int _timeout;
 };
